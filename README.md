@@ -57,7 +57,7 @@ A high-performance Windows disk cleanup utility designed for maximum speed and s
 #### Build Steps
 ```batch
 # Clone the repository
-git clone https://github.com/your-username/DiskCleaner.git
+git clone https://github.com/Nems1337/DiskCleaner.git
 cd DiskCleaner
 
 # Build the project
