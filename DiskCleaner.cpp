@@ -125,7 +125,7 @@ private:
             CREATESTRUCT* pCreate = reinterpret_cast<CREATESTRUCT*>(lParam);
             pThis = reinterpret_cast<DiskCleanerGUI*>(pCreate->lpCreateParams);
             SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(pThis));
-            pThis->hwndMain = hwnd;  // Set the window handle
+            pThis->hwndMain = hwnd;
         } else {
             pThis = reinterpret_cast<DiskCleanerGUI*>(GetWindowLongPtr(hwnd, GWLP_USERDATA));
         }
@@ -148,10 +148,8 @@ private:
                 
             case WM_COMMAND:
                 if (lParam == 0) { 
-                    // Menu command (lParam is 0 for menu items)
                     HandleMenuCommand(LOWORD(wParam));
                 } else {
-                    // Control command (lParam contains control handle)
                     HandleCommand(LOWORD(wParam));
                 }
                 return 0;
@@ -215,7 +213,6 @@ private:
     }
 
     void CreateControls() {
-        // Create menu bar
         HMENU hMenuBar = CreateMenu();
         HMENU hFileMenu = CreatePopupMenu();
         
@@ -502,7 +499,6 @@ private:
         return result;
     }
 
-    // Version functions
     std::string GetVersionString() {
         return VERSION_STRING;
     }
@@ -558,7 +554,6 @@ private:
         SetStatusText(oss.str());
     }
 
-    // File I/O functions for custom directories
     void SaveCustomDirectories() {
         std::ofstream file("custom_dirs.txt");
         if (file.is_open()) {
@@ -607,7 +602,6 @@ private:
             if (SHGetPathFromIDList(pidl, path)) {
                 std::string pathStr = StringToString(std::wstring(path));
                 
-                // Check if directory already exists
                 bool alreadyExists = false;
                 for (const auto& item : cleanupItems) {
                     if (item.path == pathStr) {
@@ -617,10 +611,9 @@ private:
                 }
                 
                 if (!alreadyExists) {
-                    // Get directory name from path
                     std::string name = fs::path(pathStr).filename().string();
                     if (name.empty()) {
-                        name = pathStr; // Use full path if no filename
+                        name = pathStr;
                     }
                     
                     std::string description = "Custom directory: " + name;
@@ -629,7 +622,6 @@ private:
                     SaveCustomDirectories();
                     PopulateListView();
                     
-                    // Calculate size for new directory
                     std::thread([this]() { CalculateSizesAsync(); }).detach();
                     
                     AppendToResults("Added custom directory: " + name);
@@ -671,13 +663,12 @@ private:
         }
     }
 
-    // Helper function to convert wide string to string
     std::string StringToString(const std::wstring& wstr) {
         if (wstr.empty()) return std::string();
         int size = WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, nullptr, 0, nullptr, nullptr);
         std::string result(size, 0);
         WideCharToMultiByte(CP_UTF8, 0, wstr.c_str(), -1, &result[0], size, nullptr, nullptr);
-        result.resize(size - 1); // Remove null terminator
+        result.resize(size - 1);
         return result;
     }
 
@@ -734,7 +725,6 @@ private:
         cleanupItems.push_back({"IIS Logs", "C:\\inetpub\\logs\\LogFiles", "IIS web server logs", false, true, false, 0});
         cleanupItems.push_back({"Event Logs", "C:\\Windows\\System32\\winevt\\Logs", "Windows Event Logs (*.evtx)", false, true, false, 0});
         
-        // Add Recycle Bin as a cleanup item
         cleanupItems.push_back({"Recycle Bin", "RECYCLE_BIN", "Files in Recycle Bin", true, false, false, 0});
 
         cleanupItems.erase(
@@ -745,7 +735,6 @@ private:
             cleanupItems.end()
         );
         
-        // Load custom directories from file
         LoadCustomDirectories();
     }
 
@@ -772,7 +761,7 @@ private:
             
             std::string desc = item.description;
             if (item.isCustom) {
-                desc = "🔧 " + desc; // Add wrench emoji for custom directories
+                desc = "🔧 " + desc;
             }
             std::wstring wdesc = StringToWString(desc);
             ListView_SetItemText(hwndListView, index, 2, const_cast<LPWSTR>(wdesc.c_str()));
@@ -806,31 +795,26 @@ private:
         return totalSize;
     }
 
-    // ULTRA-FAST folder size calculation - optimized for speed
     uintmax_t GetFolderSizeFast(const std::string& folderPath) {
         uintmax_t totalSize = 0;
         std::error_code ec;
         
         try {
-            // Use faster iteration with minimal error checking for speed
             auto iter = fs::recursive_directory_iterator(folderPath, 
                 fs::directory_options::skip_permission_denied | fs::directory_options::follow_directory_symlink, ec);
             
-            if (ec) return 0; // Quick exit on access error
+            if (ec) return 0;
             
             for (const auto& entry : iter) {
-                // Fast path - minimal error checking for maximum speed
                 try {
                     if (entry.is_regular_file()) {
                         totalSize += entry.file_size();
                     }
                 } catch (...) {
-                    // Ignore individual file errors for speed - keep going
                     continue;
                 }
             }
         } catch (...) {
-            // If anything fails, fall back to 0 - don't crash
             return 0;
         }
         
@@ -880,7 +864,6 @@ private:
         std::atomic<int> completedItems{0};
         std::vector<std::thread> sizeThreads;
         
-        // MAXIMUM PARALLEL SIZE CALCULATION - All directories simultaneously
         for (size_t i = 0; i < cleanupItems.size(); ++i) {
             sizeThreads.emplace_back([this, i, &completedItems]() {
                 try {
@@ -890,29 +873,25 @@ private:
                         cleanupItems[i].size = GetFolderSizeFast(cleanupItems[i].path);
                     }
                 } catch (...) {
-                    cleanupItems[i].size = 0; // Set to 0 on error, don't crash
+                    cleanupItems[i].size = 0;
                 }
                 
                 completedItems++;
                 
-                // Update progress every few items to avoid UI spam
                 if (completedItems.load() % 3 == 0 || completedItems.load() == static_cast<int>(cleanupItems.size())) {
                     UpdateProgress(completedItems.load(), static_cast<int>(cleanupItems.size()));
                 }
             });
         }
         
-        // Wait for all threads with timeout
         auto startTime = std::chrono::high_resolution_clock::now();
         for (auto& thread : sizeThreads) {
             if (thread.joinable()) {
                 thread.join();
             }
             
-            // Timeout protection - don't wait more than 30 seconds for size calculation
             auto elapsed = std::chrono::high_resolution_clock::now() - startTime;
             if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() > 30) {
-                // Detach remaining threads
                 for (auto& remainingThread : sizeThreads) {
                     if (remainingThread.joinable()) {
                         remainingThread.detach();
@@ -927,9 +906,8 @@ private:
         SetStatusText("⚡ Size calculation complete!");
     }
 
-    // Quick check if directory is empty or inaccessible
     bool IsDirectoryEmptyOrInaccessible(const std::string& folderPath) {
-        if (folderPath == "RECYCLE_BIN") return false; // Special case
+        if (folderPath == "RECYCLE_BIN") return false;
         
         try {
             if (!fs::exists(folderPath)) return true;
@@ -937,19 +915,18 @@ private:
             
             std::error_code ec;
             auto it = fs::directory_iterator(folderPath, ec);
-            if (ec) return true; // Inaccessible
+            if (ec) return true;
             
-            return it == fs::directory_iterator{}; // Empty if begin == end
+            return it == fs::directory_iterator{};
         } catch (...) {
-            return true; // Treat any exception as inaccessible
+            return true;
         }
     }
 
     CleanupResult DeleteFolderContentsParallel(const std::string& folderPath, const std::string& itemName) {
         auto startTime = std::chrono::high_resolution_clock::now();
         CleanupResult result{itemName, 0, 0, 0, true, "", std::chrono::milliseconds(0)};
-        
-        // Skip empty or inaccessible directories immediately
+
         if (IsDirectoryEmptyOrInaccessible(folderPath)) {
             AppendToResults(itemName + " - Skipped (empty or inaccessible)");
             auto endTime = std::chrono::high_resolution_clock::now();
@@ -957,7 +934,6 @@ private:
             return result;
         }
         
-        // Handle Recycle Bin specially
         if (folderPath == "RECYCLE_BIN") {
             if (dryRunMode) {
                 AppendToResults("[DRY RUN] Would empty Recycle Bin");
@@ -966,27 +942,24 @@ private:
                 result.duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
                 return result;
             } else {
-                // Empty the recycle bin
                 try {
                     uintmax_t sizeBefore = GetRecycleBinSize();
                     
-                    // If recycle bin is empty, consider it successful
                     if (sizeBefore == 0) {
                         result.bytesRemoved = 0;
                         result.filesDeleted = 0;
                         result.success = true;
                         AppendToResults("Recycle Bin is already empty");
                     } else {
-                        DWORD flags = 0x00000001 | 0x00000002 | 0x00000004; // SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND
+                        DWORD flags = 0x00000001 | 0x00000002 | 0x00000004;
                         HRESULT hr = SHEmptyRecycleBinW(NULL, NULL, flags);
                         
                         if (SUCCEEDED(hr)) {
                             result.bytesRemoved = sizeBefore;
-                            result.filesDeleted = 1; // We don't have exact file count, so use 1 to indicate success
+                            result.filesDeleted = 1;
                             result.success = true;
                             AppendToResults("Recycle Bin emptied successfully - " + FormatBytes(sizeBefore) + " freed");
                         } else {
-                            // Even if it fails, mark as success if it's just because it's empty or similar minor issue
                             if (hr == 0x8000ffff || hr == S_FALSE) {
                                 result.bytesRemoved = 0;
                                 result.filesDeleted = 0;
@@ -1033,14 +1006,12 @@ private:
                 }
             }
             
-            // ULTRA-HIGH-SPEED file deletion with maximum parallelization
-            const size_t maxThreads = std::thread::hardware_concurrency() * 2; // Use more threads for I/O bound operations
+            const size_t maxThreads = std::thread::hardware_concurrency() * 2;
             const size_t batchSize = (std::max)(size_t(1), itemsToDelete.size() / maxThreads);
             
             std::vector<std::thread> deleteThreads;
             std::atomic<int> deleted{0}, skipped{0};
             
-            // Launch maximum parallel deletion threads
             for (size_t i = 0; i < itemsToDelete.size(); i += batchSize) {
                 size_t endIdx = (std::min)(i + batchSize, itemsToDelete.size());
                 
@@ -1073,23 +1044,19 @@ private:
                         }
                     }
                     
-                    // Update atomics once per batch for performance
                     deleted += localDeleted;
                     skipped += localSkipped;
                 });
             }
             
-            // Wait for all deletion threads with timeout
             auto deleteStart = std::chrono::high_resolution_clock::now();
             for (auto& thread : deleteThreads) {
                 if (thread.joinable()) {
                     thread.join();
                 }
                 
-                // Safety timeout - if deletion takes too long, move on
                 auto elapsed = std::chrono::high_resolution_clock::now() - deleteStart;
                 if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count() > 30) {
-                    // Detach remaining threads and continue
                     for (auto& remainingThread : deleteThreads) {
                         if (remainingThread.joinable()) {
                             remainingThread.detach();
