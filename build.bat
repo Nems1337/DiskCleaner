@@ -1,16 +1,15 @@
 @echo off
 setlocal enabledelayedexpansion
-:: Remove existing executable if it exists
+
 if exist "DiskCleaner.exe" (
     del "DiskCleaner.exe"
 )
-:: Start compilation in background and get process ID
+
 start /b cmd /c "g++ -std=c++17 -O2 -DUNICODE -D_UNICODE -mwindows DiskCleaner.cpp -o DiskCleaner.exe -lcomctl32 -lshell32 -lole32 && echo SUCCESS > build_status.log || echo FAILED > build_status.log"
 
-:: Animation characters for spinner
 set /a "count=0"
 
-:: Show animated building text while compilation runs
+:: some unnecesary fancy shit i made for fun :P
 :animate
 if exist "build_status.log" goto :done
 
@@ -32,12 +31,12 @@ goto :animate
 :done
 cls
 
-:: Check if compilation was successful
 for /f "delims=" %%a in ('type build_status.log 2^>nul') do set "result=%%a"
 
 echo Done.
 
-:: Cleanup temporary files
 if exist "build_status.log" del "build_status.log"
 
 timeout /t 1 /nobreak >nul
+
+exit /b
