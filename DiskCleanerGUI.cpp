@@ -194,7 +194,6 @@ private:
             WS_VISIBLE | WS_CHILD | BS_PUSHBUTTON,
             620, 200, 100, 30, hwndMain, (HMENU)ID_BTN_RECYCLEBIN, GetModuleHandle(nullptr), nullptr);
 
-        // Create checkboxes
         hwndChkDryRun = CreateWindow(L"BUTTON", L"Dry Run Mode",
             WS_VISIBLE | WS_CHILD | BS_AUTOCHECKBOX,
             620, 250, 120, 20, hwndMain, (HMENU)ID_CHK_DRYRUN, GetModuleHandle(nullptr), nullptr);
@@ -373,15 +372,12 @@ private:
     void AppendToResults(const std::string& text) {
         std::lock_guard<std::mutex> lock(logMutex);
         
-        // Get current text length
         int length = GetWindowTextLength(hwndResults);
         
-        // Move to end and append new text
         SendMessage(hwndResults, EM_SETSEL, length, length);
         std::wstring wtext = StringToWString(text + "\r\n");
         SendMessage(hwndResults, EM_REPLACESEL, FALSE, (LPARAM)wtext.c_str());
         
-        // Auto-scroll to bottom
         SendMessage(hwndResults, EM_SCROLLCARET, 0, 0);
     }
 
@@ -468,7 +464,6 @@ private:
         cleanupItems.push_back({"IIS Logs", "C:\\inetpub\\logs\\LogFiles", "IIS web server logs", false, true, 0});
         cleanupItems.push_back({"Event Logs", "C:\\Windows\\System32\\winevt\\Logs", "Windows Event Logs (*.evtx)", false, true, 0});
         
-        // Add Recycle Bin as a cleanup item
         cleanupItems.push_back({"Recycle Bin", "RECYCLE_BIN", "Files in Recycle Bin", true, false, 0});
 
         cleanupItems.erase(
@@ -541,7 +536,6 @@ private:
         uintmax_t totalSize = 0;
         
         try {
-            // Get the recycle bin size using Windows API
             SHQUERYRBINFO sqrbi = {};
             sqrbi.cbSize = sizeof(SHQUERYRBINFO);
             
@@ -550,10 +544,8 @@ private:
             if (SUCCEEDED(hr)) {
                 totalSize = static_cast<uintmax_t>(sqrbi.i64Size);
             } else {
-                // Fallback: Try to calculate size manually by checking known recycle bin paths
                 std::vector<std::string> recycleBinPaths;
                 
-                // Try to get all drives
                 DWORD drives = GetLogicalDrives();
                 for (int i = 0; i < 26; i++) {
                     if (drives & (1 << i)) {
@@ -565,13 +557,11 @@ private:
                     }
                 }
                 
-                // Calculate total size from all recycle bin folders
                 for (const auto& path : recycleBinPaths) {
                     totalSize += GetFolderSize(path);
                 }
             }
         } catch (const std::exception&) {
-            // If all else fails, return 0
             totalSize = 0;
         }
         
@@ -620,7 +610,6 @@ private:
         auto startTime = std::chrono::high_resolution_clock::now();
         CleanupResult result{itemName, 0, 0, 0, true, "", std::chrono::milliseconds(0)};
         
-        // Handle Recycle Bin specially
         if (folderPath == "RECYCLE_BIN") {
             if (dryRunMode) {
                 AppendToResults("[DRY RUN] Would empty Recycle Bin");
@@ -631,15 +620,14 @@ private:
                 result.duration = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime);
                 return result;
             } else {
-                // Empty the recycle bin
                 try {
                     uintmax_t sizeBefore = GetRecycleBinSize();
-                    DWORD flags = 0x00000001 | 0x00000002 | 0x00000004; // SHERB_NOCONFIRMATION | SHERB_NOPROGRESSUI | SHERB_NOSOUND
+                    DWORD flags = 0x00000001 | 0x00000002 | 0x00000004;
                     HRESULT hr = SHEmptyRecycleBinW(NULL, NULL, flags);
                     
                     if (SUCCEEDED(hr)) {
                         result.bytesRemoved = sizeBefore;
-                        result.filesDeleted = 1; // We don't have exact file count, so use 1 to indicate success
+                        result.filesDeleted = 1;
                         result.success = true;
                         AppendToResults("Recycle Bin emptied successfully - " + FormatBytes(sizeBefore) + " freed");
                     } else {
